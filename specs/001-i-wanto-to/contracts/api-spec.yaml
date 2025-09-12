@@ -1,0 +1,830 @@
+openapi: 3.0.3
+info:
+  title: Vehicle Diagnostics API
+  description: API for Peugeot 2008 vehicle diagnostic data collection and mobile reporting
+  version: 1.0.0
+  contact:
+    name: Vehicle Diagnostics Team
+    email: diagnostics@example.com
+
+servers:
+  - url: http://localhost:8000/api/v1
+    description: Development server
+  - url: https://api.vehiclediagnostics.com/v1
+    description: Production server
+
+paths:
+  /vehicles:
+    get:
+      summary: List registered vehicles
+      description: Retrieve a paginated list of registered vehicles
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of vehicles to return
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: offset
+          in: query
+          description: Number of vehicles to skip
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: List of vehicles retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  vehicles:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Vehicle'
+                  total_count:
+                    type: integer
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      summary: Register a new vehicle
+      description: Register a Peugeot 2008 vehicle for diagnostic monitoring
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VehicleCreate'
+      responses:
+        '201':
+          description: Vehicle registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Vehicle'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Vehicle with this VIN already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /vehicles/{vehicleId}:
+    get:
+      summary: Get vehicle details
+      description: Retrieve detailed information about a specific vehicle
+      parameters:
+        - name: vehicleId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Vehicle details retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Vehicle'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /vehicles/{vehicleId}/sessions:
+    get:
+      summary: Get diagnostic sessions for a vehicle
+      description: Retrieve diagnostic sessions for a specific vehicle
+      parameters:
+        - name: vehicleId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          description: Filter by session status
+          required: false
+          schema:
+            $ref: '#/components/schemas/SessionStatus'
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 10
+      responses:
+        '200':
+          description: Diagnostic sessions retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sessions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DiagnosticSession'
+                  total_count:
+                    type: integer
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      summary: Start a new diagnostic session
+      description: Initiate a new diagnostic session for the vehicle
+      parameters:
+        - name: vehicleId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DiagnosticSessionCreate'
+      responses:
+        '201':
+          description: Diagnostic session started successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiagnosticSession'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Another session is already active for this vehicle
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /sessions/{sessionId}:
+    get:
+      summary: Get diagnostic session details
+      description: Retrieve detailed information about a diagnostic session
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Session details retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiagnosticSession'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    patch:
+      summary: Update diagnostic session
+      description: Update the status or end a diagnostic session
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DiagnosticSessionUpdate'
+      responses:
+        '200':
+          description: Session updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiagnosticSession'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /sessions/{sessionId}/data:
+    get:
+      summary: Get system data from diagnostic session
+      description: Retrieve time-series data collected during a diagnostic session
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: parameter_name
+          in: query
+          description: Filter by specific parameter name
+          required: false
+          schema:
+            type: string
+        - name: start_time
+          in: query
+          description: Start time for data range (ISO 8601)
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: end_time
+          in: query
+          description: End time for data range (ISO 8601)
+          required: false
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: System data retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data_points:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SystemData'
+                  total_count:
+                    type: integer
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      summary: Add system data to diagnostic session
+      description: Submit diagnostic data collected from the vehicle
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                data_points:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/SystemDataCreate'
+                  minItems: 1
+                  maxItems: 1000
+              required:
+                - data_points
+      responses:
+        '201':
+          description: System data added successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  added_count:
+                    type: integer
+                  data_points:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SystemData'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /sessions/{sessionId}/reports:
+    get:
+      summary: Get reports for diagnostic session
+      description: Retrieve all reports generated for a diagnostic session
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: report_type
+          in: query
+          description: Filter by report type
+          required: false
+          schema:
+            $ref: '#/components/schemas/ReportType'
+      responses:
+        '200':
+          description: Reports retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reports:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Report'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      summary: Generate a new report
+      description: Create a new diagnostic report from session data
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReportCreate'
+      responses:
+        '201':
+          description: Report generation started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Report'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /vehicles/{vehicleId}/alerts:
+    get:
+      summary: Get alerts for a vehicle
+      description: Retrieve active and recent alerts for a specific vehicle
+      parameters:
+        - name: vehicleId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: severity
+          in: query
+          description: Filter by alert severity
+          required: false
+          schema:
+            $ref: '#/components/schemas/AlertSeverity'
+        - name: acknowledged
+          in: query
+          description: Filter by acknowledgment status
+          required: false
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Alerts retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  alerts:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Alert'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /alerts/{alertId}/acknowledge:
+    post:
+      summary: Acknowledge an alert
+      description: Mark an alert as acknowledged by the user
+      parameters:
+        - name: alertId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Alert acknowledged successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Alert'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Alert already acknowledged
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  schemas:
+    Vehicle:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        vin:
+          type: string
+          pattern: '^[A-HJ-NPR-Z0-9]{17}$'
+          description: Vehicle Identification Number (17 characters)
+        model_year:
+          type: integer
+          minimum: 2008
+          maximum: 2030
+        engine_type:
+          type: string
+          example: "1.2L PureTech"
+        transmission:
+          type: string
+          enum: ["manual", "automatic", "cvt"]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - vin
+        - model_year
+        - created_at
+        - updated_at
+
+    VehicleCreate:
+      type: object
+      properties:
+        vin:
+          type: string
+          pattern: '^[A-HJ-NPR-Z0-9]{17}$'
+        model_year:
+          type: integer
+          minimum: 2008
+          maximum: 2030
+        engine_type:
+          type: string
+        transmission:
+          type: string
+          enum: ["manual", "automatic", "cvt"]
+      required:
+        - vin
+        - model_year
+
+    DiagnosticSession:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        vehicle_id:
+          type: string
+          format: uuid
+        started_at:
+          type: string
+          format: date-time
+        ended_at:
+          type: string
+          format: date-time
+          nullable: true
+        connection_method:
+          type: string
+          enum: ["bluetooth", "wifi", "cable"]
+        adapter_type:
+          type: string
+          example: "ELM327"
+        status:
+          $ref: '#/components/schemas/SessionStatus'
+        total_data_points:
+          type: integer
+          minimum: 0
+        error_message:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - vehicle_id
+        - started_at
+        - status
+        - created_at
+
+    DiagnosticSessionCreate:
+      type: object
+      properties:
+        connection_method:
+          type: string
+          enum: ["bluetooth", "wifi", "cable"]
+        adapter_type:
+          type: string
+      required:
+        - connection_method
+        - adapter_type
+
+    DiagnosticSessionUpdate:
+      type: object
+      properties:
+        status:
+          $ref: '#/components/schemas/SessionStatus'
+        error_message:
+          type: string
+          nullable: true
+        ended_at:
+          type: string
+          format: date-time
+
+    SessionStatus:
+      type: string
+      enum: ["active", "completed", "failed", "interrupted"]
+
+    SystemData:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        session_id:
+          type: string
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+        parameter_name:
+          type: string
+          example: "ENGINE_LOAD"
+        parameter_id:
+          type: string
+          example: "01 04"
+        raw_value:
+          type: string
+        converted_value:
+          type: number
+          nullable: true
+        unit:
+          type: string
+          example: "%"
+        is_error_code:
+          type: boolean
+        severity_level:
+          $ref: '#/components/schemas/SeverityLevel'
+      required:
+        - id
+        - session_id
+        - timestamp
+        - parameter_name
+        - parameter_id
+        - raw_value
+        - is_error_code
+
+    SystemDataCreate:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        parameter_name:
+          type: string
+        parameter_id:
+          type: string
+        raw_value:
+          type: string
+        converted_value:
+          type: number
+          nullable: true
+        unit:
+          type: string
+        is_error_code:
+          type: boolean
+          default: false
+        severity_level:
+          $ref: '#/components/schemas/SeverityLevel'
+      required:
+        - timestamp
+        - parameter_name
+        - parameter_id
+        - raw_value
+
+    SeverityLevel:
+      type: string
+      enum: ["info", "warning", "error", "critical"]
+
+    Report:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        session_id:
+          type: string
+          format: uuid
+        report_type:
+          $ref: '#/components/schemas/ReportType'
+        title:
+          type: string
+          maxLength: 200
+        generated_at:
+          type: string
+          format: date-time
+        summary:
+          type: string
+        recommendations:
+          type: array
+          items:
+            type: object
+            properties:
+              priority:
+                type: string
+                enum: ["low", "medium", "high", "urgent"]
+              category:
+                type: string
+              description:
+                type: string
+              estimated_cost:
+                type: number
+                nullable: true
+        charts_config:
+          type: object
+          description: Configuration for mobile chart display
+        data_points_analyzed:
+          type: integer
+          minimum: 0
+        status:
+          type: string
+          enum: ["generating", "ready", "archived"]
+      required:
+        - id
+        - session_id
+        - report_type
+        - title
+        - generated_at
+        - status
+
+    ReportCreate:
+      type: object
+      properties:
+        report_type:
+          $ref: '#/components/schemas/ReportType'
+        title:
+          type: string
+          maxLength: 200
+      required:
+        - report_type
+        - title
+
+    ReportType:
+      type: string
+      enum: ["summary", "fuel_analysis", "error_analysis", "maintenance"]
+
+    Alert:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        vehicle_id:
+          type: string
+          format: uuid
+        report_id:
+          type: string
+          format: uuid
+          nullable: true
+        alert_type:
+          type: string
+          enum: ["error_code", "maintenance", "performance", "safety"]
+        severity:
+          $ref: '#/components/schemas/AlertSeverity'
+        title:
+          type: string
+          maxLength: 100
+        description:
+          type: string
+        recommended_action:
+          type: string
+        is_acknowledged:
+          type: boolean
+          default: false
+        created_at:
+          type: string
+          format: date-time
+        acknowledged_at:
+          type: string
+          format: date-time
+          nullable: true
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+        - id
+        - vehicle_id
+        - alert_type
+        - severity
+        - title
+        - description
+        - recommended_action
+        - is_acknowledged
+        - created_at
+
+    AlertSeverity:
+      type: string
+      enum: ["low", "medium", "high", "critical"]
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          nullable: true
+      required:
+        - error
+        - message
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+security:
+  - ApiKeyAuth: []
